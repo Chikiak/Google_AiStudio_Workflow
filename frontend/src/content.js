@@ -1,0 +1,1 @@
+console.log("Content Script inyectado en Google AI Studio.");

@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "AI Context Orchestrator",
+  "version": "1.0.0",
+  "description": "Orquestador de contextos offline-first para Google AI Studio.",
+  "action": {
+    "default_popup": "index.html"
+  },
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://aistudio.google.com/*"
+      ],
+      "js": [
+        "src/content.js"
+      ]
+    }
+  ]
+}
