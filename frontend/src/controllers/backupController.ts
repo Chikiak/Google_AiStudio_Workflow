@@ -26,7 +26,6 @@ export const backupOrphanText = async (payload: any) => {
  */
 export const getRecoveryHistory = async (payload: any) => {
     const parsedLimit = payload ? Number(payload.limit) : NaN;
-    // Si limit no es válido o es excesivo, se acota estrictamente a un máximo seguro de 100.
     const limit = (!isNaN(parsedLimit) && parsedLimit > 0) ? Math.min(parsedLimit, 100) : 20;
 
     const history = await db.recovery_history.orderBy('timestamp').reverse().limit(limit).toArray();
