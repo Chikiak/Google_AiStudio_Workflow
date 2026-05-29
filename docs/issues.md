@@ -2,354 +2,352 @@
 
 ## Milestone 1: Infraestructura Core y Configuración
 
-### Issue #1: [Infraestructura] - Inicialización del Proyecto y Setup de Tailwind CSS
-
+### Issue #1: [Infraestructura] - Inicialización del Proyecto y Setup de Tailwind CSS v4
 **Tipo:** Frontend
 **Dependencias:** Ninguna
 
 **Descripción:**
-Configurar el entorno de desarrollo base para la extensión de navegador (Manifest V3). Implementar Tailwind CSS con la
-paleta de colores semántica especificada (Indigo, Zinc, Emerald, Amber, Red) y tipografía Sans (Inter/Roboto) para
-garantizar el enfoque minimalista y de "Carga Cognitiva Cero".
+Configurar el entorno de desarrollo base para la extensión de navegador (Manifest V3) e integrar **Tailwind CSS v4**.
+Debe sentar las bases para la paleta semántica (Indigo, Zinc, Emerald, Amber, Red) directamente desde CSS. Se busca
+minimizar las dependencias y asegurar que la extensión sea ligera y rápida.
 
 **Criterios de Aceptación:**
 
 - [ ] **Dado que** inicio el entorno de desarrollo, **Cuando** compilo el proyecto, **Entonces** se debe generar un
   `manifest.json` válido para MV3 y los archivos estáticos básicos.
-- [ ] **Dado que** aplico clases de Tailwind, **Cuando** renderizo una vista de prueba, **Entonces** las variables de
-  color personalizadas (`bg-zinc-50`, `text-indigo-600`, etc.) deben aplicarse correctamente según el `design.md`.
+- [ ] **Dado que** aplico clases de Tailwind, **Cuando** renderizo una vista de prueba, **Entonces** los estilos se
+  aplican sin errores y reflejan la paleta del `design.md`.
 
 **Notas Técnicas:**
-Configurar PostCSS y el archivo `tailwind.config.js` extendiendo el `theme.colors` para incluir los valores semánticos
-exactos indicados en el documento de diseño visual.
+
+- **Tailwind v4:** No crees un archivo `tailwind.config.js`. Utiliza un archivo principal CSS (ej. `global.css`) e
+  incluye `@import "tailwindcss";`. Define las variables de color extendidas usando la directiva
+  `@theme { --color-indigo-600: #...; }` según la documentación oficial de v4.
+- Utiliza Vite (con `@tailwindcss/vite`) u otra herramienta de empaquetado moderna para procesar el CSS y generar los
+  assets para la extensión.
 
 ---
 
-### Issue #2: [Base de Datos] - Configuración de IndexedDB con Dexie.js y Esquemas
-
+### Issue #2: [Base de Datos] - Configuración de IndexedDB con Dexie.js
 **Tipo:** Base de Datos
 **Dependencias:** Ninguna
 
 **Descripción:**
-Inicializar la base de datos local `ContextOrchestratorDB` utilizando Dexie.js para manejar la persistencia offline.
-Crear las colecciones `profiles` y `recovery_history` con los índices necesarios para búsquedas rápidas, preparando la
-estructura (UUIDs, `updated_at`, `deleted_at`) para una futura sincronización en la nube.
+Inicializar la base de datos local `ContextOrchestratorDB` utilizando la versión más reciente de Dexie.js (v4+) para
+manejar la persistencia offline. Crear las colecciones preparadas para sincronización (Soft Deletes, control de
+versiones).
 
 **Criterios de Aceptación:**
 
 - [ ] **Dado que** la extensión se instala, **Cuando** el Service Worker arranca, **Entonces** se debe instanciar la
   base de datos versión 1 con las tablas `profiles` y `recovery_history`.
-- [ ] **Dado que** inserto un registro en `profiles`, **Entonces** debe aceptar un `id` UUID v4 generado en el cliente,
-  y permitir búsquedas por los índices `*tags` y `last_used_at`.
+- [ ] **Dado que** inserto un registro en `profiles`, **Entonces** debe aceptar un `id` UUID v4 y permitir búsquedas por
+  los índices `*tags` y `last_used_at`.
 
 **Notas Técnicas:**
-Utilizar la librería `uuid` (v4). El esquema de Dexie debe ser exactamente:
-`profiles: 'id, name, *tags, updated_at, deleted_at, usage_count, last_used_at'`
-`recovery_history: '++id, timestamp, target_url'`
+
+- Esquema de Dexie: `profiles: 'id, name, *tags, updated_at, deleted_at, usage_count, last_used_at'` y
+  `recovery_history: '++id, timestamp, target_url'`.
+- **Mejor Práctica:** Para la generación de UUIDs, NO instales la librería `uuid`. Utiliza la API nativa del navegador
+  `crypto.randomUUID()`, la cual es estándar en entornos de Service Worker y navegadores modernos, reduciendo el tamaño
+  del bundle.
 
 ---
 
-### Issue #3: [Integración] - Implementación del Bus de Mensajes en Service Worker
+### Issue #3: [Integración] - Bus de Mensajes en el Service Worker (Background)
 
-**Tipo:** Integración / Backend Local
+**Tipo:** Backend Local
 **Dependencias:** Issue #2
 
 **Descripción:**
-Crear el enrutador central en el Service Worker (`background.js`) que actuará como backend local. Debe recibir mensajes
-estructurados desde el Popup o los Content Scripts mediante `chrome.runtime.onMessage` y rutear las peticiones a los
-controladores de base de datos adecuados basándose en la propiedad `action`.
+Crear el enrutador central en el Service Worker (`background.js`) para aislar la lógica de negocio. Recibirá mensajes
+estructurados (Action/Payload) y orquestará llamadas a la base de datos.
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** un script cliente envía un mensaje `{ action: "PING" }`, **Cuando** el Service Worker lo recibe, *
-  *Entonces** debe responder con un `{ status: "ok" }`.
-- [ ] **Dado que** el listener está activo, **Cuando** se ejecuta una acción asíncrona (como consultas a Dexie), *
-  *Entonces** debe retornar `true` en el listener para mantener el canal de mensajes abierto hasta enviar la respuesta.
+- [ ] **Dado que** un script cliente envía `{ action: "PING" }`, **Cuando** el SW lo recibe, **Entonces** debe responder
+  con `{ status: "ok" }`.
+- [ ] **Dado que** se envían múltiples peticiones concurrentes, **Entonces** el Service Worker no debe bloquearse y debe
+  manejar las promesas correctamente, retornando respuestas asíncronas de forma estable.
 
 **Notas Técnicas:**
-Implementar un `switch` o mapa de controladores para las acciones requeridas (`GET_PROFILES`, `SAVE_PROFILE`,
-`DELETE_PROFILE`, etc.). Retornar una estructura estandarizada `{ status: "ok"|"error", data: any, message?: string }`.
+
+- Para peticiones asíncronas en `chrome.runtime.onMessage` (MV3), es obligatorio retornar `true` sincrónicamente desde
+  el listener para indicar al navegador que usarás `sendResponse` de forma asíncrona tras resolver tu Promesa. Retorna
+  siempre una estructura estándar: `{ status: "ok"|"error", data?: any, message?: string }`.
 
 ---
 
 ## Milestone 2: Sistema de Diseño y UI Base
 
 ### Issue #4: [UI Core] - Implementación de Átomos (Button, Input, Textarea, Tag)
-
 **Tipo:** Frontend
 **Dependencias:** Issue #1
 
 **Descripción:**
-Construir los componentes reactivos/DOM puros (Átomos) detallados en la arquitectura de componentes UI. Deben cumplir
-con las pautas de accesibilidad (WCAG AA), incluyendo estados de focus (anillos visibles) y gestión de roles ARIA.
+Construir los componentes reactivos (Átomos) detallados en el `design.md`. Deben cumplir rigurosamente con las
+directrices de accesibilidad (WCAG AA).
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** uso el componente `Button`, **Cuando** cambio su prop `isLoading` a `true`, **Entonces** se
-  deshabilita visualmente y muestra un Spinner giratorio.
-- [ ] **Dado que** navego con teclado, **Cuando** un `Input` o `Button` recibe el foco, **Entonces** debe mostrar un
-  anillo visible (`ring-2 ring-indigo-500`).
-- [ ] **Dado que** ocurre un error de validación, **Cuando** el `Input` recibe `isInvalid=true`, **Entonces** su borde
-  debe ser rojo (`border-red-500`) y debe usar `aria-invalid="true"`.
+- [ ] **Dado que** uso el `Button` con `isLoading=true`, **Entonces** se deshabilita visualmente (sin cambiar
+  tamaño/layout) y muestra un Spinner nativo accesible.
+- [ ] **Dado que** navego con teclado, **Cuando** un elemento interactivo recibe el foco, **Entonces** debe mostrar un
+  anillo visible de alto contraste (`ring-2 ring-indigo-500`).
+- [ ] **Dado que** ocurre un error, **Entonces** el `Input` o `Textarea` debe usar el atributo `aria-invalid="true"`.
 
 **Notas Técnicas:**
-Crear componentes reutilizables. El componente `Tag` debe incluir la capacidad opcional de tener un botón "x" para ser
-removido durante la edición (`onRemove`).
+
+- **Mejor Práctica Tailwind:** Utiliza `tailwind-merge` y `clsx` (o `clsx` nativo) para la composición dinámica de
+  clases pasadas por props (`className`), evitando conflictos de precedencia comunes al sobreescribir estilos base en
+  componentes reutilizables.
 
 ---
 
 ### Issue #5: [UI Core] - Implementación de Moléculas (ProfileCard y ToastNotification)
-
 **Tipo:** Frontend
 **Dependencias:** Issue #4
 
 **Descripción:**
-Agrupar los átomos desarrollados para crear las tarjetas de lista de perfiles y el sistema global de notificaciones (
-Toasts) para feedback del usuario.
+Componer átomos para crear tarjetas de perfiles interactivas y el gestor de notificaciones globales (Toasts).
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** visualizo un `ProfileCard`, **Cuando** hago hover sobre la tarjeta, **Entonces** el botón "Aplicar"
-  oculto debe aparecer suavemente (fade-in).
-- [ ] **Dado que** la aplicación dispara un `ToastNotification` de error, **Entonces** debe usar `aria-live="assertive"`
-  para que el lector de pantalla lo anuncie de inmediato.
+- [ ] **Dado que** navego con teclado sobre el `ProfileCard`, **Cuando** hago focus en él, **Entonces** el botón "
+  Aplicar" oculto se hace visible (manejo de estado `focus-within`).
+- [ ] **Dado que** se dispara un `ToastNotification` de error crítico, **Entonces** debe estar inyectado en un
+  contenedor con `aria-live="assertive"`.
 
 **Notas Técnicas:**
-El `ToastNotification` debe manejar auto-desmontaje (timeout de ~3-5 segundos) a menos que sea de tipo interactivo (ej.
-con botón "Deshacer").
+
+- El sistema de Toasts debe gestionarse desde el contexto superior (ej. React Context, Zustand o eventos nativos custom)
+  para asegurar un solo punto de montaje en el DOM.
 
 ---
 
 ## Milestone 3: Gestión de Perfiles (HU01)
 
 ### Issue #6: [Perfiles] - Controladores CRUD en Service Worker
-
 **Tipo:** Backend Local
 **Dependencias:** Issue #2, Issue #3
 
 **Descripción:**
-Implementar la lógica transaccional real para `GET_PROFILES`, `SAVE_PROFILE`, `DELETE_PROFILE` y `LOG_USAGE` dentro del
-Service Worker interactuando con Dexie.js.
+Implementar la lógica transaccional de los endpoints locales (`GET_PROFILES`, `SAVE_PROFILE`, `DELETE_PROFILE`,
+`LOG_USAGE`).
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** ejecuto `SAVE_PROFILE` sin un ID, **Cuando** se procesa, **Entonces** se genera un UUID, inicializa
-  `usage_count` en 0, asigna `updated_at` a la fecha actual y guarda el registro.
-- [ ] **Dado que** ejecuto `DELETE_PROFILE`, **Cuando** se procesa, **Entonces** no se elimina el registro (Hard
-  delete), sino que se actualiza el campo `deleted_at` (Soft delete) con la fecha actual.
-- [ ] **Dado que** ejecuto `GET_PROFILES`, **Entonces** solo debe devolver registros donde `deleted_at` sea nulo,
-  permitiendo filtrado opcional por el array de `tags`.
+- [ ] **Dado que** ejecuto `SAVE_PROFILE` sin ID, **Entonces** se usa `crypto.randomUUID()`, `usage_count` inicia en 0 y
+  `updated_at` recibe `Date.now()`.
+- [ ] **Dado que** ejecuto `DELETE_PROFILE`, **Entonces** se ejecuta un soft-delete (se añade `deleted_at`) en vez de un
+  borrado destructivo.
+- [ ] **Dado que** ejecuto `GET_PROFILES`, **Entonces** retorna únicamente los registros con `deleted_at == null` (a
+  menos que se pase un flag explícito para sincronización).
 
 **Notas Técnicas:**
-`LOG_USAGE` debe hacer un update atómico incrementando `usage_count` en +1 y actualizando `last_used_at`.
+
+- Aislar esta lógica en archivos separados importados al `background.js` principal para mantener el código limpio.
 
 ---
 
 ### Issue #7: [Perfiles] - Interfaz ProfileManagerModal
-
 **Tipo:** Frontend
 **Dependencias:** Issue #4, Issue #6
 
 **Descripción:**
-Construir el formulario complejo (Modal) para crear y editar perfiles. Debe manejar validación del estado *dirty* para
-advertir sobre cierre accidental con cambios no guardados.
+Crear el formulario modal para creación/edición de perfiles, incluyendo validación de estado "dirty" (cambios no
+guardados).
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** estoy escribiendo en el modal, **Cuando** intento cerrarlo o hacer clic en el backdrop oscuro, *
-  *Entonces** se me debe mostrar un `alert` o advertencia impidiendo el cierre accidental.
-- [ ] **Dado que** abro el modal, **Cuando** navego con `Tab`, **Entonces** el foco debe quedar atrapado (*Focus Trap*)
-  dentro de los límites del modal.
+- [ ] **Dado que** hay cambios no guardados en el formulario, **Cuando** intento cerrar el modal (clic fuera o escape),
+  **Entonces** se muestra una confirmación impidiendo la pérdida accidental de datos.
+- [ ] **Dado que** se abre el modal, **Entonces** el foco del teclado queda confinado dentro del modal (Focus Trap).
 
 **Notas Técnicas:**
-Debe comunicarse con el SW vía `SAVE_PROFILE`. Incluir selector o input dinámico para agregar/eliminar items del array
-de `tags`.
+
+- **Mejor Práctica de Accesibilidad:** NO construyas el Focus Trap a mano con `divs`. Utiliza el elemento nativo HTML5
+  `<dialog>` con su método `showModal()`. El navegador gestionará el backdrop, el aislamiento de fondo y el atrapado del
+  foco de forma nativa e impecable.
 
 ---
 
 ### Issue #8: [Perfiles] - Pantalla Principal de Dashboard
 
-**Tipo:** Frontend / Integración
+**Tipo:** Frontend
 **Dependencias:** Issue #5, Issue #7
 
 **Descripción:**
-Ensamblar la pantalla principal (Extension Popup) con la barra de búsqueda, la lista scrollable de `ProfileCard`s
-cargados desde la base de datos, y los accesos para "Nuevo Perfil" e "Historial".
+Ensamblar la pantalla principal (Extension Popup) con búsqueda reactiva, renderizado de perfiles y navegación.
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** abro la extensión, **Cuando** carga la pantalla principal, **Entonces** debe mostrar los perfiles
-  ordenados por los más usados/recientes solicitando los datos mediante `GET_PROFILES`.
-- [ ] **Dado que** escribo en la barra de búsqueda, **Cuando** tecleo un tag o texto, **Entonces** la lista debe
-  filtrarse reactivamente en tiempo real.
+- [ ] **Dado que** abro la extensión, **Entonces** la lista muestra los perfiles ordenados por los más
+  recientes/usados (`last_used_at`, `usage_count`).
+- [ ] **Dado que** escribo en el buscador superior, **Entonces** la lista se filtra en tiempo real evaluando el texto
+  ingresado contra el `name`, el `content` y los `tags`.
 
 **Notas Técnicas:**
-Asegurar que la lista de tarjetas pueda manejar un alto volumen de items con un scroll nativo suave.
+
+- Utiliza `useLiveQuery` de Dexie (si usas React) o una arquitectura reactiva similar para que el listado de UI se
+  refresque automáticamente cada vez que el Service Worker modifique un registro de perfiles, evitando llamadas de
+  refresco manuales.
 
 ---
 
 ## Milestone 4: Inyección y Asistente Contextual (HU02, HU06, HU07)
 
 ### Issue #9: [Inyección] - Detección Adaptativa en Google AI Studio (HU07)
-
 **Tipo:** Frontend / Content Script
 **Dependencias:** Ninguna
 
 **Descripción:**
-Crear un Content Script (`content.js`) especializado en observar el DOM de Google AI Studio e identificar el área de
-texto objetivo (System Instructions / Prompt textarea) utilizando selectores semánticos en lugar de clases CSS
-volátiles.
+Crear un Content Script (`content.js`) para rastrear semánticamente el `textarea` destino en las plataformas de IA, sin
+depender de clases CSS volátiles.
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** estoy en Google AI Studio, **Cuando** el Content Script se carga, **Entonces** debe ser capaz de
-  localizar el textarea basándose en atributos estables como `role="textbox"` o `contenteditable="true"` junto con su
-  posición.
-- [ ] **Dado que** la UI de la página objetivo sufre mutaciones (cambia de vista), **Cuando** el textarea vuelve a
-  aparecer, **Entonces** un `MutationObserver` debe detectarlo y re-enganchar las referencias.
+- [ ] **Dado que** estoy en la página destino, **Cuando** el Content Script se ejecuta, **Entonces** usa selectores
+  estables (ej. `role="textbox"`, `aria-label`, o `contenteditable="true"`) para enganchar el campo.
+- [ ] **Dado que** la UI cambia dinámicamente mediante SPA routing, **Entonces** un `MutationObserver` detecta y
+  reasigna el campo correctamente.
 
 **Notas Técnicas:**
-Esta es un área de riesgo (Assumptions documentados). Las plataformas de IA cambian frecuentemente. Evitar
-`querySelector('.clase-random')`. Depender firmemente de atributos de accesibilidad nativos de la plataforma para alta
-resiliencia.
+
+- Riesgo alto: Mantener esta lógica altamente modularizada. Crear una capa de abstracción `PlatformDetector` que
+  determine qué reglas (selectores de atributo) usar según el `window.location.hostname`.
 
 ---
 
 ### Issue #10: [Inyección] - Implementación de ContextualWidget (HU06)
-
 **Tipo:** Frontend / Content Script
 **Dependencias:** Issue #4, Issue #9
 
 **Descripción:**
-Inyectar un botón flotante y sutil directamente sobre la interfaz de Google AI Studio, posicionado cerca del textarea
-detectado en el Issue #9.
+Inyectar un widget flotante sutil (botón + popover) junto al `textarea` detectado, para selección rápida de perfiles.
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** el textarea de la IA está vacío, **Cuando** hago hover sobre el área, **Entonces** el botón sutil (
-  ej. icono de rayo) aumenta su opacidad a 100%.
-- [ ] **Dado que** hago clic en el botón flotante, **Entonces** despliega un menú pequeño (Drop-up/Popover) mostrando
-  los 3 perfiles más usados (solicitados al Service Worker).
+- [ ] **Dado que** paso el mouse sobre la zona, **Entonces** la opacidad del botón flotante cambia de sutil (40%) a
+  visible (100%).
+- [ ] **Dado que** el usuario hace clic en el botón, **Entonces** se despliega una mini-lista con los 3 perfiles más
+  usados.
 
 **Notas Técnicas:**
-Asegurar que el z-index sea lo suficientemente alto para superponerse a la UI local, pero sin interferir con modales
-nativos de Google AI Studio. Usar Shadow DOM para encapsular los estilos de Tailwind e impedir colisiones con la web
-original.
+
+- **Crítico para Tailwind v4:** Debido a que el componente se inyecta en un **ShadowRoot** (para evitar que la página
+  huésped rompa nuestros estilos), **debes asegurar que el archivo CSS compilado de Tailwind se inyecte también dentro
+  del tag `<style>` del Shadow DOM**. Si omites esto, el widget flotante carecerá de estilos y Tailwind no podrá actuar
+  sobre el contenido encapsulado.
 
 ---
 
-### Issue #11: [Inyección] - Motor de Inyección de Texto y Flujo de Aplicación (HU02)
-
+### Issue #11: [Inyección] - Motor de Inyección de Texto y Flujo (HU02)
 **Tipo:** Integración
 **Dependencias:** Issue #8, Issue #9, Issue #10
 
 **Descripción:**
-Implementar la lógica final de inyección: tomar el contenido de un perfil seleccionado (desde el Popup o el
-ContextualWidget), reemplazar el contenido del textarea de Google AI Studio, despachar eventos DOM para engañar a
-React/Angular de que el humano tipeó, y registrar el uso en base de datos.
+Aplicar el perfil en el `textarea`, despachar eventos sintéticos para que los frameworks modernos (React/Angular en la
+página huésped) detecten los cambios, y registrar el uso (`LOG_USAGE`).
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** aplico un perfil, **Cuando** el texto se inyecta, **Entonces** se deben despachar eventos nativos (
-  `input`, `change`) para que Google AI Studio registre el texto y habilite su botón de envío.
-- [ ] **Dado que** el perfil se inyecta exitosamente, **Entonces** se envía un mensaje `LOG_USAGE` al Service Worker
-  para actualizar las métricas del perfil.
-- [ ] **Dado que** aplico un perfil, **Entonces** se muestra un `ToastNotification` verde ("Perfil aplicado con éxito")
-  inyectado en el DOM.
+- [ ] **Dado que** elijo aplicar un perfil, **Cuando** se inyecta, **Entonces** el valor del área destino cambia y se
+  despachan eventos DOM nativos (`input`, `change`, `blur`) necesarios.
+- [ ] **Dado que** el texto se inyectó, **Entonces** se muestra un Toast verde en la pantalla huésped.
 
 **Notas Técnicas:**
-Crucial: Antes de sobrescribir el textarea, el script **debe leer el valor actual**. Si no está vacío, este flujo se
-bloquea hasta invocar primero el servicio de Backup (Issue #12).
+
+- Muchos frameworks interceptan setters nativos de `value`. Para inyectar texto fiablemente en un SPA moderno, necesitas
+  sobreescribir el `prototype setter` de HTMLInputElement/HTMLTextAreaElement antes de despachar el evento
+  `Event('input', { bubbles: true })`.
 
 ---
 
 ## Milestone 5: Red de Seguridad y Autoguardado (HU03)
 
-### Issue #12: [Seguridad] - Interceptor de Textos Huérfanos y Controlador DB
-
+### Issue #12: [Seguridad] - Interceptor de Textos Huérfanos
 **Tipo:** Backend Local / Content Script
 **Dependencias:** Issue #11
 
 **Descripción:**
-Implementar la acción `BACKUP_ORPHAN_TEXT` en el Service Worker. Modificar el Content Script para que, si el usuario
-tiene texto escrito manualmente no guardado en la caja de la IA y aplica un perfil, este texto se envíe al backend antes
-del reemplazo.
+Antes de inyectar un nuevo texto sobreescribiendo uno existente, leer el valor actual del campo, y si fue escrito
+manualmente por el usuario y no es nulo, guardarlo en `recovery_history`.
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** tengo texto manual escrito en la IA, **Cuando** aplico un perfil sobreescribiéndolo, **Entonces** el
-  texto previo se guarda silenciosamente en la colección `recovery_history` con su timestamp y URL de origen.
-- [ ] **Dado que** ocurrió un autoguardado preventivo, **Entonces** el `ToastNotification` debe ser de color Ámbar e
-  indicar "Texto anterior respaldado en el historial".
+- [ ] **Dado que** he escrito algo en el prompt, **Cuando** aplico un perfil, **Entonces** ese texto se envía al Service
+  Worker (mediante `BACKUP_ORPHAN_TEXT`) antes del reemplazo.
+- [ ] **Dado que** se realiza el backup, **Entonces** el Toast cambia a un aviso de prevención ("Texto anterior
+  respaldado", color Ámbar).
 
 **Notas Técnicas:**
-Implementar también una sub-tarea para el arranque del Service Worker: al iniciar, ejecutar una purga (DELETE query)
-sobre la colección `recovery_history` para borrar registros donde el timestamp indique más de 30 días de antigüedad,
-evitando saturar la cuota de IndexedDB del usuario.
+
+- Añadir un trabajo de limpieza al inicio del SW: ejecutar una purga para borrar registros de `recovery_history` donde
+  `timestamp` < (Date.now() - 30 días) para optimización de cuota IndexedDB.
 
 ---
 
-### Issue #13: [Seguridad] - Panel de RecoveryHistoryPanel
-
+### Issue #13: [Seguridad] - Interfaz RecoveryHistoryPanel
 **Tipo:** Frontend
 **Dependencias:** Issue #5, Issue #12
 
 **Descripción:**
-Desarrollar la interfaz (accesible desde el menú del Dashboard) que lista cronológicamente el texto respaldado por el
-sistema de seguridad.
+Crear la vista cronológica (timeline) para mostrar, visualizar o copiar al portapapeles los fragmentos recuperados.
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** accedo al Historial de Recuperación, **Cuando** visualizo la lista, **Entonces** cada entrada muestra
-  un fragmento truncado, formato relativo de tiempo ("Hace 5 minutos") y el origen ("Google AI Studio").
-- [ ] **Dado que** quiero recuperar mi trabajo, **Cuando** presiono el botón "Copiar" en una entrada, **Entonces** el
-  texto completo se copia al portapapeles del sistema y recibo un feedback visual.
+- [ ] **Dado que** veo el historial, **Entonces** observo tiempo relativo ("Hace 10 minutos"), y el origen exacto (
+  `target_url`).
+- [ ] **Dado que** doy clic en "Copiar", **Entonces** el texto se copia al portapapeles del SO.
 
 **Notas Técnicas:**
-Se requerirá usar la API `navigator.clipboard.writeText()` para la acción de copiado.
+
+- Usar la API asíncrona moderna `navigator.clipboard.writeText()`. Manejar errores apropiadamente en caso de que el
+  entorno no disponga de contexto seguro (`https`).
 
 ---
 
 ## Milestone 6: Portabilidad de Datos (HU05)
 
-### Issue #14: [Portabilidad] - Motor de Importación/Exportación de JSON
+### Issue #14: [Portabilidad] - Motor de Exportación e Importación de JSON
 
-**Tipo:** Backend Local (Service Worker)
+**Tipo:** Backend Local
 **Dependencias:** Issue #6
 
 **Descripción:**
-Implementar los controladores `EXPORT_DATA` y `IMPORT_DATA` en el Service Worker para permitir el respaldo físico de la
-base de datos, resolviendo la necesidad crítica del MVP offline-first.
+Lógica en el Service Worker para el Dump (volcado) completo de los datos base a formato stringificado y viceversa.
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** solicito una exportación, **Cuando** el SW consulta Dexie, **Entonces** recupera todos los `profiles`
-  donde `deleted_at == null`, los serializa en JSON y los retorna codificados en Base64.
-- [ ] **Dado que** envío un JSON válido para importar, **Cuando** el SW lo procesa, **Entonces** realiza una operación
-  `Upsert` (Inserta nuevos UUIDs y sobreescribe los UUIDs existentes) ignorando campos malformados.
+- [ ] **Dado que** se invoca la exportación, **Entonces** retorna un objeto JSON masivo excluyendo registros "hard"
+  eliminados.
+- [ ] **Dado que** se envía un JSON para importar, **Entonces** el SW hace "Upsert" (Merge), respetando el registro que
+  tenga el `updated_at` más reciente si hay conflicto de UUID.
 
 **Notas Técnicas:**
-Añadir validación estricta de esquema (Schema Validation) en el endpoint `IMPORT_DATA` para prevenir corrupción de DB si
-el usuario carga un JSON inválido.
 
-### Issue #15: [Portabilidad] - UI de Configuración y Portabilidad
+- Es obligatorio implementar validación de esquema en la importación (usando librerías ligeras como Zod, Superstruct o
+  checks manuales seguros) para evitar inyección de JSONs corruptos que destruyan el DB.
 
+---
+
+### Issue #15: [Portabilidad] - UI de Portabilidad en Configuración
 **Tipo:** Frontend
 **Dependencias:** Issue #14
 
 **Descripción:**
-Crear la pantalla de "Configuración" (Settings) que expondrá los botones para Descargar Copia de Seguridad y Cargar
-Biblioteca.
+Integrar los botones y lógica de "Exportar JSON" e "Importar Biblioteca" en la pestaña de Configuración.
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** presiono "Exportar Perfiles", **Cuando** el proceso termina, **Entonces** el navegador fuerza
-  automáticamente la descarga de un archivo `context_orchestrator_backup_[fecha].json`.
-- [ ] **Dado que** selecciono un archivo mediante el explorador nativo, **Cuando** se completa la importación, *
-  *Entonces** se recarga el listado de perfiles principal mostrando un resumen de la importación (Ej. "12 perfiles
-  importados con éxito").
+- [ ] **Dado que** clic en Exportar, **Entonces** el sistema orquesta la descarga nativa de un archivo
+  `context_backup_YYYYMMDD.json`.
+- [ ] **Dado que** selecciono importar archivo, **Entonces** se muestran estados de carga y finalmente un Toast del
+  resultado (Ej. "10 perfiles añadidos").
 
 **Notas Técnicas:**
-Para forzar la descarga sin un servidor backend real, usar el paradigma de `URL.createObjectURL(blob)` generado en el
-cliente (Popup) a partir de la respuesta del Service Worker. Inyectar un elemento `<a>` dinámico, hacer click
-programático y revocar el object URL para evitar memory leaks.
+
+- Para exportar datos desde el cliente sin servidor, crea un `Blob` a partir de la respuesta JSON del SW, pásalo por
+  `URL.createObjectURL(blob)`, aplícalo a un `<a>` oculto, dispara `.click()` dinámicamente y llama inmediatamente a
+  `URL.revokeObjectURL()` para no causar fugas de memoria.
