@@ -1,155 +1,158 @@
-**Nota Arquitectónica inicial:** Dado que el proyecto inicia desde cero, se ha adoptado **Tailwind CSS** como framework
-estándar para la implementación. Se ha diseñado un sistema visual con una paleta de colores neutral y moderna por
-defecto para garantizar una integración sin fricción con interfaces de IA de terceros. Se han añadido proactivamente
-estados de *Carga (Loading)* y *Notificación (Snackbars)* para manejar el feedback del sistema.
+# diseño_ui.md
+
+**Nota Arquitectónica inicial:** Basado en el análisis del `state.md` y `idea.md`, el proyecto ya utiliza **Tailwind CSS
+v4** en un entorno React 19. El ecosistema es una Extensión de Chrome (Popup/Sidebar y Content Script). El sistema de
+diseño mantendrá una estética "Zero-Cognitive Load", ampliando la paleta de colores neutrales existente para soportar
+los nuevos estados complejos de **Sincronización en la Nube (Cloud-Sync)** y la **Máquina del Tiempo de Perfiles (
+Versionado)**, asegurando que la experiencia siga sintiéndose nativa, rápida y "Offline-First".
+
+---
 
 ## 1. Resumen de la Experiencia (UX)
 
-La experiencia de usuario está diseñada bajo los principios de **"Carga Cognitiva Cero"** y **"Flujo Ininterrumpido"**.
-La interfaz operará principalmente como un panel flotante o barra lateral (Sidebar/Extension Popup) complementada por
-elementos inyectados en el DOM (Asistente Contextual).
+La evolución de la interfaz se centra en transformar una herramienta de utilidad local en un **Ecosistema de
+Productividad Omnipresente**, sin añadir ruido visual.
+El principio rector es la **"Tranquilidad del Usuario" (Peace of Mind)**:
 
-La estética es minimalista, dando prioridad al contenido (los perfiles y textos). Las microinteracciones juegan un papel
-crucial: el sistema siempre informará al usuario sobre lo que está sucediendo (ej. "Perfil aplicado con éxito" o "Texto
-anterior respaldado") para construir una confianza absoluta en la "Red de Seguridad".
+1. **Sincronización Invisible:** El usuario debe saber de un vistazo (mediante un micro-indicador) que sus datos están
+   respaldados, pero el proceso de sincronización jamás debe bloquear su flujo de trabajo, incluso si pierde la
+   conexión.
+2. **Experimentación sin Miedo:** La funcionalidad de "Máquina del Tiempo" (Versionado) se presenta como un panel
+   contextual dentro de la edición del perfil, permitiendo iterar *prompts* libremente con la confianza absoluta de que
+   cualquier degradación en los resultados de la IA puede revertirse con un solo clic.
 
 ## 2. Flujo de Navegación
 
-El diseño es "Mobile-First" adaptativo, aunque el contexto de uso principal es en plataformas de escritorio.
+Dado el contexto de Extensión de Chrome (espacio reducido en Popup o Sidebar), la navegación se estructura en un modelo
+de capas (Drill-down):
 
-* **Pantalla Principal (Dashboard/Lista):**
-    * Barra de búsqueda superior (Filtro por texto y tags).
-    * Lista de tarjetas de perfiles (Scrollable).
-    * Botón de Acción Principal (FAB o botón de encabezado) para "Nuevo Perfil".
-    * Menú inferior o superior para navegación secundaria: *Historial de Recuperación* y *Configuración*.
-* **Modal/Pantalla de Creación/Edición de Perfil:**
-    * Formulario: Nombre, Instrucciones (Textarea expandible), Selector de Etiquetas.
-    * Acciones: Guardar, Cancelar.
-* **Pantalla de Historial de Recuperación (Red de Seguridad):**
-    * Lista cronológica de textos guardados automáticamente.
-    * Acciones por ítem: "Copiar al portapapeles", "Restaurar".
-* **Asistente Contextual (UI Superpuesta en la plataforma IA):**
-    * Botón flotante sutil (opacidad baja, se activa en *Hover*) cerca del área de input de la IA.
-    * Al hacer clic: Menú desplegable rápido (Drop-up) con los perfiles más usados.
+* **Nivel 1: Dashboard Principal (Lista de Perfiles)**
+    * *Header:* Barra de búsqueda, Filtros y el nuevo **Indicador de Estado de Sincronización (Cloud Status)**.
+    * *Body:* Lista de tarjetas de perfiles.
+    * *Acciones:* Crear Nuevo Perfil, Abrir Configuración/Cuenta.
+* **Nivel 2: Modal de Configuración & Cuenta (Over-lay)**
+    * Flujo de Autenticación (Login/Vincular cuenta).
+    * *Toggle* (Interruptor) de Privacidad: "Habilitar/Pausar sincronización de perfiles".
+* **Nivel 3: Vista de Detalle / Edición de Perfil**
+    * Formulario de edición del Prompt.
+    * *Acción Secundaria:* Pestaña o Botón flotante lateral "Historial de Versiones".
+* **Nivel 4: Panel de "Máquina del Tiempo" (Versionado)**
+    * Se desliza (Slide-in) sobrepuesto a la vista de edición.
+    * Muestra una línea de tiempo (Timeline) cronológica.
+    * Previsualización de diferencias (Diffs visuales opcionales) y botón "Restaurar esta versión".
 
-## 3. Sistema de Diseño y Estilos (Tailwind CSS)
+## 3. Sistema de Diseño y Estilos
 
-* **Tipografía:** `font-sans` (Inter o Roboto). Tamaños legibles (`text-sm` para descripciones, `text-base` general).
-* **Paleta de Colores (Variables semánticas):**
-    * *Primary (Acentos y acciones):* Indigo (`bg-indigo-600`, hover: `bg-indigo-700`).
-    * *Background (Fondos):* Zinc (`bg-zinc-50` para fondo principal, `bg-white` para tarjetas/paneles). Dark mode:
-      `bg-zinc-900`.
-    * *Text (Tipografía):* `text-zinc-900` (Títulos), `text-zinc-500` (Secundario/Placeholder).
-    * *Success (Feedback):* Emerald (`text-emerald-600`, `bg-emerald-50`).
-    * *Warning/Safety Net:* Amber (`text-amber-600`, `bg-amber-50`).
-    * *Error:* Red (`text-red-600`, `ring-red-500`).
-* **Bordes y Sombras:** Uso extensivo de `rounded-lg` o `rounded-xl` para un aspecto moderno y amigable. Sombras suaves
-  `shadow-sm` para tarjetas, `shadow-lg` para modales y widgets flotantes.
+Se extiende el sistema basado en **Tailwind CSS v4** para acomodar las nuevas mecánicas de estado y feedback.
+
+* **Tipografía:** `font-sans` (Inter).
+* **Paleta de Colores (Variables Semánticas Expandidas):**
+    * *Primary (Acciones principales):* Indigo (`bg-indigo-600`, hover: `bg-indigo-700`).
+    * *Backgrounds:* Zinc (`bg-zinc-50` para fondo global, `bg-white` para tarjetas/modales). Dark Mode: `bg-zinc-900` /
+      `bg-zinc-800`.
+    * *Texto:* `text-zinc-900` (Títulos), `text-zinc-500` (Metadatos/Fechas).
+    * *Cloud-Sync (Nuevos Estados):*
+        * **Synced (Al día):** Sky/Blue (`text-sky-500`).
+        * **Pending/Offline (Desconectado pero guardado localmente):** Amber (`text-amber-500`).
+        * **Syncing (Sincronizando):** Indigo (`text-indigo-400` con animación de pulso o giro).
+        * **Sync Paused/Disabled:** Zinc (`text-zinc-400`).
+    * *Feedback general:* Emerald (Éxito), Red (Errores críticos).
+* **Micro-interacciones:** Animaciones fluidas (`transition-all duration-200`) para transiciones de estado,
+  especialmente en la restauración de versiones.
 
 ## 4. Arquitectura de Componentes (UI)
 
+A continuación, se detalla la estructura para los nuevos componentes requeridos para la iniciativa, diseñados bajo la
+metodología Atomic Design.
+
 ### 4.1. Átomos
 
-#### `Button`
+#### `SyncStatusIcon`
 
-* **Propósito:** Elemento de acción universal.
-* **Props:** `variant` ('primary' | 'secondary' | 'ghost'), `size` ('sm' | 'md' | 'lg'), `isLoading` (boolean),
-  `isDisabled` (boolean), `icon` (ReactNode).
-* **Estados:**
-    * *Normal:* `bg-indigo-600 text-white rounded-md transition-all`.
-    * *Hover:* `bg-indigo-700 shadow-md transform -translate-y-px`.
-    * *Focus:* `outline-none ring-2 ring-indigo-500 ring-offset-2`.
-    * *Active:* `scale-95 bg-indigo-800`.
-    * *Disabled:* `opacity-50 cursor-not-allowed bg-zinc-300 text-zinc-500`.
-    * *Loading:* Deshabilitado visualmente, reemplaza el ícono con un `Spinner` giratorio. Texto: "Aplicando...".
+* **Propósito:** Informar el estado actual de la sincronización en la nube (HU-01, HU-02).
+* **Props:** `state` ('synced' | 'syncing' | 'offline' | 'paused' | 'error').
+* **Estados Visuales:**
+    * *Synced:* Icono de Nube con Check, color `text-sky-500`.
+    * *Syncing:* Icono de Flechas circulares, `animate-spin text-indigo-400`.
+    * *Offline:* Icono de Nube con raya diagonal, `text-amber-500`.
+    * *Hover:* Muestra un `Tooltip` nativo o en componente con el texto explicativo (ej. "Trabajando sin conexión. Se
+      sincronizará al reconectar").
 
-#### `Input` & `Textarea`
+#### `TimelineDot`
 
-* **Propósito:** Captura de texto para nombres de perfil e instrucciones.
-* **Props:** `value`, `onChange`, `placeholder`, `isInvalid` (boolean), `errorMessage` (string).
-* **Estados:**
-    * *Normal:* `border border-zinc-300 rounded-md bg-white text-zinc-900`.
-    * *Hover:* `border-zinc-400`.
-    * *Focus:* `ring-2 ring-indigo-500 border-indigo-500 outline-none`.
-    * *Error:* `ring-2 ring-red-500 border-red-500`. El texto del error debe aparecer abajo en `text-xs text-red-600`.
-
-#### `Tag (Badge)`
-
-* **Propósito:** Categorización visual de los perfiles.
-* **Props:** `label` (string), `color` (string - opcional), `onRemove` (function - opcional para modo edición).
-* **Estilo Base:**
-  `inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800`.
+* **Propósito:** Nodo visual para el historial de iteraciones (HU-04).
+* **Props:** `isActive` (boolean - indica si es la versión actual cargada).
+* **Estilo Base:** Círculo pequeño `w-3 h-3 rounded-full`. Si `isActive` es true,
+  `bg-indigo-600 ring-4 ring-indigo-100`. Si false, `bg-zinc-300`.
 
 ### 4.2. Moléculas
 
-#### `ProfileCard`
+#### `SyncToggleSwitch`
 
-* **Propósito:** Mostrar un perfil en la lista principal.
-* **Estructura:** Contenedor `div`, Título (h3), Lista de `Tag`s, Botón "Aplicar" oculto/sutil hasta hacer hover.
-* **Props:** `profile` (Object), `onApply` (function), `onEdit` (function).
+* **Propósito:** Permitir al usuario pausar la sincronización por privacidad (HU-03).
+* **Props:** `isSyncEnabled` (boolean), `onToggle` (function), `isLoading` (boolean).
+* **Estructura:** Un control tipo Switch (Toggle) emparejado con un título "Sincronización en la Nube" y un subtítulo
+  explicativo ("Mantén tus perfiles seguros en todos tus dispositivos").
 * **Estados:**
-    * *Normal:* Fondo blanco, borde ligero `border-zinc-200`.
-    * *Hover:* `border-indigo-300 shadow-sm cursor-pointer`. Aparece el botón de acción rápida "Aplicar".
-    * *Focus-within:* Asegura que al navegar con teclado (`Tab`), el botón de aplicar reciba el `ring-2`.
+    * *Active:* Switch a la derecha, fondo `bg-indigo-600`.
+    * *Inactive:* Switch a la izquierda, fondo `bg-zinc-300`.
+    * *Disabled/Loading:* Opacidad reducida `opacity-50`, cursor `cursor-not-allowed`.
 
-#### `ToastNotification`
+#### `VersionHistoryItem`
 
-* **Propósito:** Feedback no bloqueante.
-* **Estructura:** Icono (Éxito/Alerta/Error), Mensaje de texto, Botón de cerrar o de acción (Ej: "Deshacer").
-* **Casos de uso críticos:**
-    * "Perfil aplicado con éxito" (Verde).
-    * "Texto anterior guardado en el Historial" (Ámbar, con botón que lleva al historial).
+* **Propósito:** Tarjeta individual dentro de la línea de tiempo del prompt (HU-04, HU-05).
+* **Props:** `versionId` (string), `timestamp` (Date), `excerpt` (string - fragmento del prompt), `isCurrent` (boolean),
+  `onRestore` (function).
+* **Estados & Estilos:**
+    * *Normal:* Contenedor con borde izquierdo alineado al `TimelineDot`. Texto de fecha `text-xs text-zinc-500`.
+      Fragmento truncado del texto.
+    * *Hover:* Fondo sutil `bg-zinc-50`. Aparece el botón de acción rápida "Restaurar" (Button variant 'ghost', size '
+      sm').
+    * *Focus:* `ring-2 ring-indigo-500` para accesibilidad por teclado.
 
 ### 4.3. Organismos
 
-#### `ProfileManagerModal` (HU01)
+#### `CloudAuthModal`
 
-* **Propósito:** Formulario completo para crear/editar.
-* **Estados de interacción:**
-    * Si el usuario intenta cerrar con cambios sin guardar (estado *dirty*), se muestra una advertencia (Alerta de
-      abandono).
-    * Estado de *Loading* explícito al guardar en la nube (Sincronización - HU04).
+* **Propósito:** Flujo de inicio de sesión y configuración inicial.
+* **Estructura:** Contenedor modal centrado (`role="dialog"`). Logo de la extensión, propuesta de valor ilustrada ("
+  Lleva tus prompts a todas partes"), Botones de autenticación (Ej. "Continuar con Google" o Email), y el
+  `SyncToggleSwitch`.
+* **Estados Interactivos:**
+    * *Loading:* Muestra un Spinner durante la validación del token y sincronización inicial de la base de datos Dexie
+      con la nube.
+    * *Error:* Snackbar interno notificando fallos de red.
 
-#### `ContextualWidget` (HU06)
+#### `TimeMachinePanel` (Versionado)
 
-* **Propósito:** Botón flotante renderizado sobre la UI de la plataforma IA.
-* **Comportamiento adaptativo:** Se posiciona dinámicamente encima del `textarea` detectado.
-* **Estados:**
-    * *Normal:* Botón circular sutil (Ej: Icono de un rayo), `opacity-40 bg-zinc-800 text-white`.
-    * *Hover:* `opacity-100 scale-110 transition-transform`.
-    * *Expanded (Active):* Abre un pequeño menú emergente (`Popover`) con los 3 perfiles más usados y una barra de
-      búsqueda rápida.
-
-#### `RecoveryHistoryPanel` (HU03)
-
-* **Propósito:** Interfaz de la red de seguridad.
-* **Estructura:** Lista tipo *timeline* de textos huérfanos. Muestra un fragmento (truncado) del texto, la fecha/hora
-  relativa (ej. "Hace 5 min"), y botones de acción ("Copiar", "Ver todo").
+* **Propósito:** Visualizar e interactuar con el historial completo de un perfil específico.
+* **Estructura:**
+    * *Header:* Título "Historial de Versiones" y botón de cierre ("X").
+    * *Body:* Contenedor con scroll vertical (`overflow-y-auto`) mapeando una lista de `VersionHistoryItem`.
+* **Interacción (HU-05):** Al hacer clic en "Restaurar" en un ítem, se dispara un modal de confirmación rápida o se
+  restaura instantáneamente lanzando un `ToastNotification` ("Versión de [Fecha] restaurada") con un botón de "
+  Deshacer" (Undo) por si fue accidental.
 
 ## 5. Especificaciones de Accesibilidad (WCAG AA)
 
-Para asegurar la usabilidad universal, todos los componentes deben integrarse de forma nativa con los siguientes
-principios:
+Dado el nivel de herramientas profesionales de la audiencia, la accesibilidad de las nuevas funciones es crítica:
 
-1. **Navegación por Teclado:**
-    * Todos los elementos interactivos (`Button`, `ProfileCard`, `Input`, `ContextualWidget`) deben tener un
-      `tabindex="0"` u orden de tabulación lógico.
-    * El flujo debe atrapar el foco (*Focus Trap*) cuando un modal o el menú contextual esté abierto, impidiendo que el
-      usuario navegue accidentalmente por el fondo oscuro.
-2. **Etiquetas ARIA (Aria-labels y Roles):**
-    * Botones sin texto (solo íconos) deben tener un atributo `aria-label` descriptivo (ej.
-      `aria-label="Aplicar perfil Técnico"`).
-    * Los modales deben utilizar `role="dialog"` y `aria-modal="true"`.
-    * Los mensajes de error en formularios y los Toasts de notificaciones deben usar `aria-live="polite"` (para feedback
-      general) o `aria-live="assertive"` (para errores críticos de red o guardado) para que los lectores de pantalla los
-      anuncien inmediatamente.
-3. **Contraste de Color:**
-    * Se debe garantizar un ratio de contraste mínimo de 4.5:1 para texto normal y 3:1 para texto grande. (La paleta
-      propuesta de Indigo-600 sobre blanco y Zinc-900 sobre Zinc-50 cumple con esta métrica).
-    * El estado `Focus` nunca debe depender exclusivamente del color. Se utilizará siempre un anillo visible (
-      `ring-2 ring-offset-2`) para indicar el elemento activo.
-4. **Resiliencia frente a cambios de UI (HU07):**
-    * Para la inyección de contexto, la selección semántica del `textarea` destino debe basarse en roles (
-      `role="textbox"`), atributos (`contenteditable="true"`) y heurísticas (ej. posición en el layout), garantizando
-      que el widget contextual y el botón "Aplicar" funcionen incluso si la plataforma IA cambia los nombres de sus
-      clases CSS.
+1. **Retroalimentación No Visual (Screen Readers):**
+    * El estado de sincronización es dinámico y en segundo plano. Cuando el estado cambie de "Offline" a "Sincronizado",
+      no se debe interrumpir al usuario, pero se debe usar una región viva invisible:
+      `<div aria-live="polite" class="sr-only">Sincronización completada</div>`.
+    * El `SyncStatusIcon` debe tener un atributo `role="status"` y un `aria-label` descriptivo estricto que cambie
+      dinámicamente (ej. `aria-label="Estado de nube: Desconectado. Cambios guardados localmente."`).
+2. **Navegación por Teclado en el Historial:**
+    * El `TimeMachinePanel` debe ser completamente navegable mediante `Tab`.
+    * Los botones de "Restaurar" que solo aparecen en *Hover* visualmente, deben volverse visibles y recibir foco real (
+      con `ring-2 ring-offset-2 ring-indigo-500`) cuando el usuario navegue con la tecla Tabulador.
+3. **Gestión de Foco (Focus Trapping):**
+    * Al abrir el `CloudAuthModal` o el `TimeMachinePanel`, el foco del teclado debe saltar automáticamente al primer
+      elemento interactivo dentro del panel.
+    * Al cerrarlos (con tecla `Esc` o botón de cierre), el foco debe retornar al botón exacto que originó la apertura
+      del panel, evitando que los usuarios pierdan su lugar en la interfaz.
+4. **Resiliencia Cognitiva y Prevención de Errores:**
+    * La acción de "Restaurar" un perfil antiguo sobrescribe el actual. Para evitar estrés, la plataforma tratará esta "
+      sobrescritura" creando una *nueva* versión del estado justo antes de restaurar. Así, el usuario siempre puede
+      deshacer una restauración errónea navegando de nuevo al historial.

@@ -1,108 +1,191 @@
-### Issue #4: [Backend Local] - Completar API Interna (Bus de Mensajes) y Lógica de Negocio
+### Issue #7: [Integración] - Resiliencia del Content Script y Fallback de Inyección
 
-**Tipo:** Backend (Service Worker)
-**Dependencias:** Ninguna (Las bases de datos ya existen)
+**Tipo:** Fullstack (Service Worker / Frontend)
+**Dependencias:** Ninguna
 
 **Descripción:**
-Actualmente el Service Worker (`background.js`) solo responde al evento `PING`. Es necesario expandir la función
-`processMessage` para que actúe como el "Backend Controller" de nuestra aplicación, implementando todos los contratos de
-la API interna definidos en `system.md`. Este issue encapsula toda la manipulación de base de datos y la
-exportación/importación de perfiles.
+Actualmente, si el usuario instala la extensión teniendo ya abierto Google AI Studio, la comunicación falla arrojando
+`chrome.runtime.lastError`. Debemos implementar un mecanismo de resiliencia: si el `sendMessage` falla al intentar
+inyectar un perfil, el orquestador debe usar la API `chrome.scripting` para inyectar dinámicamente el Content Script en
+caliente, y luego reintentar la operación, logrando una experiencia "Zero-Friction" sin obligar al usuario a recargar la
+página.
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** la UI solicita perfiles, **Cuando** se envía la acción `GET_PROFILES`, **Entonces** el Service Worker
-  debe retornar todos los registros de Dexie que no tengan `deleted_at`, ordenados por `last_used_at` descendente.
-- [ ] **Dado que** se crea o edita un perfil, **Cuando** se envía `SAVE_PROFILE`, **Entonces** se debe realizar un
-  *upsert* en IndexedDB asignando `updated_at` a la fecha actual y generar un UUID si es creación.
-- [ ] **Dado que** se elimina un perfil, **Cuando** se envía `DELETE_PROFILE`, **Entonces** se debe realizar un
-  *Soft-Delete* asignando un timestamp a `deleted_at` (preparación para la nube).
-- [ ] **Dado que** se inyecta un perfil, **Cuando** se envía `LOG_USAGE`, **Entonces** el contador `usage_count` debe
-  incrementar en 1 y actualizar `last_used_at`.
-- [ ] **Dado que** el usuario solicita exportar, **Cuando** se invoca `EXPORT_DATA`, **Entonces** se deben extraer todos
-  los perfiles activos, convertirlos a una cadena JSON base64 y retornarlos.
-- [ ] **Dado que** el usuario importa datos, **Cuando** se invoca `IMPORT_DATA` con un JSON válido, **Entonces** se
-  realiza un *upsert* masivo emparejando por UUID.
-- [ ] **Dado que** el Content Script envía un texto no guardado, **Cuando** se invoca `BACKUP_ORPHAN_TEXT`, **Entonces**
-  se debe guardar usando la función criptográfica `addRecoveryHistorySecure` ya existente.
-- [ ] **Dado que** el Service Worker se inicia, **Cuando** carga por primera vez, **Entonces** debe ejecutar una
-  rotación eliminando registros de `recovery_history` más antiguos de 30 días.
+- [ ] **Dado que** el Content Script no está cargado en la pestaña activa, **Cuando** el usuario hace clic en "Aplicar",
+  **Entonces** la función `handleApply` detectará el `lastError`.
+- [ ] **En ese momento**, el sistema debe invocar `chrome.scripting.executeScript` para inyectar `src/content.js`
+  programáticamente en esa pestaña.
+- [ ] **Una vez inyectado**, se debe reintentar el envío del mensaje `INJECT_PROFILE` de forma transparente para el
+  usuario.
+- [ ] **Dado que** la pestaña no es `aistudio.google.com`, **Cuando** el usuario hace clic en aplicar, **Entonces** la
+  UI debe mostrar un mensaje claro y amigable (Toast o alerta) indicando: "Navega a Google AI Studio para aplicar
+  perfiles", en lugar de fallar silenciosamente.
 
 **Notas Técnicas:**
 
-- Refactoriza el `switch (action)` en `background.js` para delegar la lógica en controladores separados (ej.
-  `profileController.js`, `backupController.js`) para no ensuciar el archivo principal.
-- Utiliza las funciones de `database.ts` ya creadas.
+- Requerirás añadir el permiso `"scripting"` en el array de `permissions` del `manifest.json`.
+- Modifica `handleApply` en `MainView.tsx` para implementar este bloque `try/catch` con estrategia de reintento (Retry
+  Pattern).
 
 ---
 
-### Issue #5: [Frontend/UI] - Construcción del Panel de Gestión (Popup) y Visualización de Perfiles
+### Issue #8: [Frontend/Integración] - Captura de Contexto Activo (Importación en Vivo)
+
+**Tipo:** Fullstack (Content Script / React UI)
+**Dependencias:** Ninguna (Preferiblemente posterior al Issue #7)
+
+**Descripción:**
+Muchos usuarios iteran sus "System Instructions" directamente en la caja de texto de Google AI Studio. Si logran un
+prompt excelente, actualmente deben copiarlo y pegarlo manualmente en la extensión para guardarlo. Vamos a añadir la
+funcionalidad "Capturar desde la página", que extraerá el texto actual del DOM y abrirá automáticamente el formulario
+de "Nuevo Perfil" pre-llenado con ese contenido.
+
+**Criterios de Aceptación:**
+
+- [ ] **Dado que** el Content Script está activo, **Cuando** recibe el nuevo mensaje `EXTRACT_CURRENT_CONTEXT`, *
+  *Entonces** debe utilizar la función existente `findSystemInstructionInput()` para leer el `value` o `textContent`
+  actual del input y retornarlo al emisor.
+- [ ] **Dado que** abro la vista principal de la extensión (`MainView`), **Cuando** visualizo las acciones principales,
+  **Entonces** debe haber un botón secundario visible (ej. icono de "Capturar/Gotero") junto a "Nuevo Perfil".
+- [ ] **Dado que** hago clic en el botón de capturar, **Entonces** la UI solicita el texto a la pestaña activa, navega
+  hacia la vista `FormView` y pre-llena el área de texto de "Instrucción (Contexto)" con el texto recuperado.
+- [ ] **Dado que** la caja de texto en la web estaba vacía, **Cuando** intento capturar, **Entonces** la UI muestra un
+  aviso (Toast): "No se encontró texto en el editor de AI Studio".
+
+**Notas Técnicas:**
+
+- En `content.js`, añade el nuevo `case` en el listener de mensajes:
+  ```javascript
+  if (message.action === 'EXTRACT_CURRENT_CONTEXT') {
+      const input = findSystemInstructionInput();
+      const content = input ? (input.value || input.textContent || '') : '';
+      sendResponse({ status: 'ok', data: content });
+      return true;
+  }
+  ```
+- En `MainView.tsx`, añade un botón flotante secundario o inclúyelo en el Header. Al recibir los datos, puedes usar un
+  estado global o pasar el contenido extraído a través de props al montar el `FormView` (ej. actualizando la prop para
+  que acepte un objeto `{ id: string | null, initialContent?: string }`).
+
+---
+
+### Issue #9: [Base de Datos & SW] - Evolución del Motor Local y Lógica de Versionado (Time Machine)
+
+**Tipo:** Backend Local (IndexedDB / Service Worker)
+**Dependencias:** Ninguna
+
+**Descripción:**
+La base de datos local actual debe evolucionar (v2) para soportar el versionado inmutable de los prompts y la
+preparación para la sincronización (CRDT/LWW). Este issue aborda la modificación del esquema de Dexie y la intercepción
+en el Service Worker para capturar instantáneas de los perfiles antes de que sean modificados (Time Machine).
+
+**Criterios de Aceptación:**
+
+- [ ] **Dado que** la extensión se actualiza, **Cuando** se inicializa Dexie, **Entonces** la base de datos debe migrar
+  a `version(2)`, añadiendo los índices `sync_status`, `is_local_only` a `profiles` y creando la tabla
+  `profile_versions`.
+- [ ] **Dado que** se edita un perfil existente, **Cuando** el usuario envía la acción `SAVE_PROFILE` y el contenido
+  difiere del actual, **Entonces** el Service Worker debe insertar una copia del contenido anterior en
+  `profile_versions` antes de aplicar el *upsert* principal.
+- [ ] **Dado que** la UI solicita el historial, **Cuando** se envía el mensaje `GET_PROFILE_VERSIONS` con un
+  `profile_id`, **Entonces** el sistema debe devolver la lista de versiones ordenadas cronológicamente (DESC).
+- [ ] **Dado que** se requiere revertir cambios, **Cuando** se invoca `RESTORE_VERSION`, **Entonces** el contenido
+  actual pasa a ser una nueva versión histórica y el contenido antiguo sobreescribe el `content` del perfil activo.
+
+**Notas Técnicas:**
+
+- *Risk Assumption:* Se asume el uso del Dexie Upgrade Framework. Asegúrate de retornar migraciones seguras en el
+  archivo `database.ts` para no romper instalaciones existentes de usuarios.
+- Agrega el Enum `sync_status: 'synced' | 'pending' | 'error'` a los modelos. Todo nuevo perfil debe nacer como
+  `pending`.
+
+---
+
+### Issue #10: [Frontend/UI] - Interfaz de la "Máquina del Tiempo" y Modificadores de Privacidad
 
 **Tipo:** Frontend (React)
-**Dependencias:** Issue #4 (Para consumir la API local)
+**Dependencias:** Issue #7
 
 **Descripción:**
-Reemplazar la pantalla base de prueba actual (`App.tsx`) por la interfaz principal del orquestador. El usuario debe
-poder ver su lista de perfiles, crear nuevos, filtrarlos por etiquetas (Tags) y acceder a las utilidades del sistema (
-Importar/Exportar e Historial de Recuperación).
+Añadir la capa visual a los motores de versionado creados en el Issue #7. Requiere crear un visor de historial dentro
+del formulario de edición de perfiles (`FormView`) y un interruptor global de privacidad (Offline-Only) en la vista de
+configuración (`SettingsView`) de acuerdo a la HU-03.
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** abro la extensión, **Cuando** la interfaz carga, **Entonces** debo ver una lista de mis perfiles
-  guardados consumiendo la acción `GET_PROFILES` del Service Worker.
-- [ ] **Dado que** quiero un nuevo contexto, **Cuando** hago clic en "Nuevo Perfil", **Entonces** se abre un
-  formulario (título, contenido, etiquetas) que al guardar envía la acción `SAVE_PROFILE`.
-- [ ] **Dado que** tengo muchos perfiles, **Cuando** escribo en la barra de búsqueda o hago clic en una etiqueta, *
-  *Entonces** la lista debe filtrarse instantáneamente.
-- [ ] **Dado que** selecciono un perfil en la lista, **Cuando** hago clic en "Aplicar", **Entonces** la UI debe enviar
-  un mensaje al *Content Script* de la pestaña activa indicando el reemplazo de texto y luego cerrar el popup.
-- [ ] **Dado que** deseo respaldar mi biblioteca, **Cuando** voy a "Configuración", **Entonces** debo tener botones
-  funcionales para Importar y Exportar JSON (HU05).
-- [ ] **Dado que** perdí información, **Cuando** accedo a la "Red de Seguridad", **Entonces** debo ver una lista de
-  textos recientes (HU03) descifrados usando la función `getDecryptedRecoveryHistory` local, con la opción de copiarlos
-  al portapapeles.
+- [ ] **Dado que** accedo a `SettingsView`, **Cuando** alterno el interruptor "Sincronización en la Nube" (desactivado),
+  **Entonces** se debe enviar la acción `SET_SYNC_PREFERENCE` al Service Worker.
+- [ ] **Dado que** estoy editando un perfil, **Cuando** hago clic en el nuevo botón "Historial de Versiones", **Entonces
+  ** se despliega una lista (modal o panel) con las fechas de edición pasadas usando `GET_PROFILE_VERSIONS`.
+- [ ] **Dado que** visualizo una versión pasada, **Cuando** hago clic en "Restaurar", **Entonces** el editor de texto
+  adopta inmediatamente ese texto, notifica visualmente el éxito y cierra el panel.
 
 **Notas Técnicas:**
 
-- Para enviar mensajes entre React y el Service Worker, crea un hook custom `useMessageBus<T>(action, payload)`.
-- La UI debe estar constreñida a los límites del Popup de MV3 (aprox 400x500px). Evita modales que sobrepasen la altura,
-  usa vistas (routing condicional o un enrutador ligero de React).
+- En `SettingsView`, si el modo nube está desactivado, visualmente advierte que los nuevos perfiles se guardarán con la
+  bandera `is_local_only = true`.
+- Utiliza las directivas de `Tailwind CSS v4` para construir el visor de historial sin exceder la altura máxima
+  permitida del popup (aprox 500px). Sugiero un componente colapsable (Accordion) para ver fragmentos de texto antiguos.
 
 ---
 
-### Issue #6: [Integración] - Content Script, Inyector de Contexto y Asistente Contextual
+### Issue #11: [Cloud Backend] - Arquitectura Serverless y Contratos de API Remota
 
-**Tipo:** Content Script / DOM Manipulation
-**Dependencias:** Issue #4 y #5
+**Tipo:** DevOps / Cloud API
+**Dependencias:** Ninguna (Desarrollo en paralelo)
 
 **Descripción:**
-Este issue aborda la interacción directa con la web de Google AI Studio (`content.js`). Su misión es identificar el área
-de texto donde se escriben los "System Instructions" de la IA, recuperar texto huérfano para salvaguardarlo e inyectar
-los nuevos perfiles de forma indetectable para la plataforma (simulando eventos de teclado nativos si es necesario para
-que React/Angular en la web host reconozca el input).
+Configurar la infraestructura de backend y la base de datos remota. Dada la naturaleza de extensión de Chrome, se debe
+implementar autenticación (Supabase/Firebase) y desplegar el endpoint transaccional de sincronización que gestionará la
+resolución de conflictos (Last-Write-Wins).
 
 **Criterios de Aceptación:**
 
-- [ ] **Dado que** la UI le dice al Content Script que aplique un perfil, **Cuando** se recibe el mensaje, **Entonces**
-  el script debe localizar de forma robusta el `<textarea>` (o `contenteditable`) de instrucciones de AI Studio.
-- [ ] **Dado que** localiza el área de texto, **Cuando** ésta ya contiene texto escrito por el usuario, **Entonces** el
-  script debe primero enviar `BACKUP_ORPHAN_TEXT` con el texto actual al Service Worker antes de sobreescribirlo (Red de
-  Seguridad).
-- [ ] **Dado que** el texto ha sido inyectado, **Cuando** la plataforma de AI Studio revisa el input, **Entonces** el
-  script debe disparar los eventos `input` o `change` apropiados para que la interfaz web de Google no considere que el
-  campo sigue vacío.
-- [ ] **Dado que** abro un nuevo chat en blanco, **Cuando** el Content Script detecta un área de texto vacía, **Entonces
-  ** debe inyectar un pequeño "Asistente Flotante" (Botón de IA) sutil cerca del input para inyectar un perfil
-  predeterminado o abrir un menú rápido (HU06).
-- [ ] **Dado que** inyecto exitosamente un perfil, **Cuando** finaliza el reemplazo, **Entonces** se debe enviar la
-  acción `LOG_USAGE` al Service Worker para contabilizar su uso.
+- [ ] **Dado que** requerimos persistencia, **Cuando** se despliega la base de datos PostgreSQL, **Entonces** deben
+  existir las tablas `users`, `profiles`, y `profile_versions` con sus relaciones y constraints.
+- [ ] **Dado que** un cliente solicita sincronizar, **Cuando** hace un `POST /api/v1/sync` con su `last_sync_timestamp`
+  y un payload de perfiles `pending`, **Entonces** el servidor debe procesar un UPSERT resolviendo conflictos donde el
+  `updated_at` remoto prevalece sobre el local o viceversa.
+- [ ] **Dado que** el cliente sube cambios, **Cuando** la transacción de BD finaliza, **Entonces** el servidor debe
+  retornar al cliente los `remote_changes` que el cliente aún no tiene y un nuevo `server_timestamp`.
+- [ ] **Dado que** requerimos autenticación, **Cuando** se llama a `POST /api/v1/auth/exchange`, **Entonces** debe
+  retornar un JWT válido y registrar al usuario si no existía.
 
 **Notas Técnicas:**
 
-- Google AI Studio usa frameworks web modernos. Cambiar la propiedad `.value` de un input por lo general no funciona
-  directamente en React/Angular si no invocas el `setter` nativo. Investiga la inyección de input usando
-  `Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set`.
-- Utiliza `MutationObserver` para identificar cuándo carga la página de Google AI Studio y el input se hace visible en
-  el DOM.
-- El Asistente Flotante debe usar Shadow DOM para asegurar que los estilos globales de Google AI Studio no rompan el CSS
-  de la extensión.
+- Se recomienda el uso de **Supabase Edge Functions** o **Cloudflare Workers** para el endpoint `/sync`, apuntando a una
+  base de datos con Connection Pooling (PgBouncer/Supavisor).
+- Asegúrate de rechazar explícitamente cualquier perfil que el cliente envíe si contiene la flag `is_local_only` (
+  Defensa en profundidad en el backend).
+
+---
+
+### Issue #12: [Fullstack / Integración] - Motor Cloud Sync Manager en Service Worker
+
+**Tipo:** Background Service / Integración REST
+**Dependencias:** Issue #7 y Issue #9
+
+**Descripción:**
+La pieza maestra que unirá el cliente local con el servidor remoto. Construir el orquestador de sincronización en
+`background.js` que se ejecutará periódicamente de forma silenciosa (Background Fetch / Alarms), empujando cambios
+locales y descargando cambios de otros dispositivos (Push/Pull Delta Sync).
+
+**Criterios de Aceptación:**
+
+- [ ] **Dado que** el usuario habilitó la nube, **Cuando** el `chrome.alarms` se dispara (ej. cada 5 min) o hay conexión
+  restablecida, **Entonces** el Service Worker debe ejecutar el ciclo de sincronización sin interrumpir el UI.
+- [ ] **Dado que** el cliente tiene perfiles modificados (`sync_status: 'pending'`), **Cuando** el SW lanza el
+  pull/push, **Entonces** se debe enviar el payload excluyendo estrictamente los registros con `is_local_only: true`.
+- [ ] **Dado que** el servidor responde con perfiles más recientes, **Cuando** el SW procesa la respuesta, **Entonces**
+  debe hacer un *upsert* en IndexedDB, marcar los registros procesados como `synced`, actualizar el
+  `last_sync_timestamp` en `app_state` e inyectar el evento `SYNC_COMPLETED` a la UI.
+- [ ] **Dado que** el usuario intenta vincular su cuenta, **Cuando** hace clic en "Login con Google" en el UI, *
+  *Entonces** la extensión debe usar `chrome.identity.getAuthToken` y comunicarse con el endpoint de exchange (Issue #9)
+  para obtener el JWT y guardarlo seguramente.
+
+**Notas Técnicas:**
+
+- Almacena el JWT en Session Storage o en la API nativa de `chrome.storage.local` configurado de manera segura.
+- Si una operación de red falla (Offline), la promesa debe resolverse silenciosamente y dejar los registros como
+  `pending` para el siguiente intento (Offline-First behavior).
