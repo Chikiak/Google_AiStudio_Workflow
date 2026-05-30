@@ -28,10 +28,11 @@ export const processMessage = async (request) => {
 
     try {
         const {action, payload} = request || {};
-
         if (typeof action === 'string') safeActionName = action;
 
-        const ACTION_HANDLERS = {
+        // Declarar sin prototipo para evitar ataques en la cadena de herencia
+        const ACTION_HANDLERS = Object.create(null);
+        Object.assign(ACTION_HANDLERS, {
             "PING": async () => ({status: "ok"}),
             "GET_PROFILES": getProfiles,
             "SAVE_PROFILE": saveProfile,
@@ -41,9 +42,9 @@ export const processMessage = async (request) => {
             "IMPORT_DATA": importData,
             "BACKUP_ORPHAN_TEXT": backupOrphanText,
             "GET_RECOVERY_HISTORY": getRecoveryHistory
-        };
+        });
 
-        // Dentro de processMessage:
+        // Verificación segura
         if (ACTION_HANDLERS[safeActionName]) {
             return await ACTION_HANDLERS[safeActionName](payload);
         }
